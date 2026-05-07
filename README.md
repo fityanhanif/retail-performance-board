@@ -3,7 +3,8 @@
 ## 📌 Deskripsi Proyek
 Proyek ini adalah dasbor analitik interaktif berbasis web yang dirancang untuk memonitor dan menganalisis performa penjualan ritel produk FMCG (Fast-Moving Consumer Goods). Dasbor ini memberikan wawasan langsung kepada level eksekutif mengenai metrik utama seperti *Revenue*, *Profit Margin*, tren transaksi, dan performa produk.
 
-** Live Demo:** [Klik di sini untuk melihat Dashboard](https://retail-performanc.vercel.app/)
+## Live Demo: 
+[Klik di sini untuk melihat Dashboard](https://retail-performanc.vercel.app/)
 
 ##  Objektif Bisnis
 * **Evaluasi Performa:** Mengidentifikasi gap antara *Gross Revenue* dan *Net Profit* dari waktu ke waktu.
