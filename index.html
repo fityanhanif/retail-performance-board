@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail Performance Board</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- PapaParse CDN untuk parsing CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- Plotly.js CDN untuk Grafik -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#000000',      // Hitam Pekat (Background Utama)
+                        cardBg: '#121212',      // Abu-abu sangat gelap (Background Kotak)
+                        borderColor: '#2A2A2A', // Border abu-abu gelap
+                        textMain: '#FFFFFF',    // Putih Bersih
+                        textMuted: '#A0A0A0',   // Abu-abu terang untuk teks sekunder
+                        accentPeach: '#FAD7A1', // Krem / Peach Terang
+                        accentRed: '#A93226'    // Merah Gelap / Crimson
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #000000;
+            color: #FFFFFF;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+            color-scheme: dark;
+        }
+
+        /* Custom Scrollbar Tema Merah-Peach */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #A93226;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FAD7A1;
+        }
+
+        /* Styling Form Element - Dropdown & Input Date */
+        .form-select {
+            background-color: #121212;
+            color: #FFFFFF;
+            border: 1px solid #2A2A2A;
+            transition: all 0.3s;
+        }
+        select.form-select {
+            padding-right: 2rem;
+        }
+        .form-select:focus {
+            outline: none;
+            border-color: #A93226;
+            box-shadow: 0 0 0 2px rgba(169, 50, 38, 0.3);
+        }
+
+        /* Card Hover Effect */
+        .kpi-card {
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            border-color: #A93226;
+            box-shadow: 0 8px 20px rgba(169, 50, 38, 0.15);
+        }
+
+        /* Menyembunyikan scrollbar di header untuk tampilan rapi */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="antialiased pt-32 md:pt-24"> 
+
+    <!-- Top Navbar / Fixed Header -->
+    <header class="fixed top-0 left-0 w-full z-50 bg-cardBg border-b border-borderColor shadow-md min-h-[5rem] px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 overflow-x-auto hide-scrollbar">
+        
+        <!-- Branding Logo & Title -->
+        <div class="flex items-center gap-3 shrink-0">
+            <svg class="w-8 h-8 text-accentPeach" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            <h1 class="text-xl font-bold text-textMain tracking-wide">Retail <span class="text-accentRed">Board</span></h1>
+        </div>
+
+        <!-- Filter Controls Container (Horizontal) -->
+        <div class="flex items-center gap-4 shrink-0 flex-wrap md:flex-nowrap justify-center">
+            <div id="loadingStatus" class="text-sm font-semibold text-accentPeach animate-pulse">
+                Memuat data...
+            </div>
+            
+            <!-- Date Filter: Start -->
+            <div class="flex items-center gap-2">
+                <label for="startDate" class="text-sm font-medium text-textMuted hidden lg:block">Start:</label>
+                <!-- Hardcoded Min, Max & Value -->
+                <input type="date" id="startDate" class="form-select text-sm py-2 px-3 rounded-lg" min="2023-01-01" max="2024-12-31" value="2023-01-01">
+            </div>
+
+            <!-- Date Filter: End -->
+            <div class="flex items-center gap-2">
+                <label for="endDate" class="text-sm font-medium text-textMuted hidden lg:block">End:</label>
+                <!-- Hardcoded Min, Max & Value -->
+                <input type="date" id="endDate" class="form-select text-sm py-2 px-3 rounded-lg" min="2023-01-01" max="2024-12-31" value="2024-12-31">
+            </div>
+
+            <!-- Filter Kategori -->
+            <div class="flex items-center gap-2">
+                <label for="categoryFilter" class="text-sm font-medium text-textMuted hidden lg:block">Category:</label>
+                <select id="categoryFilter" class="form-select text-sm py-2 px-3 rounded-lg appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23A0A0A0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_0.7rem_top_50%] bg-[length:0.65rem_auto]">
+                    <option value="All">All Categories</option>
+                </select>
+            </div>
+
+            <!-- Filter Provinsi -->
+            <div class="flex items-center gap-2">
+                <label for="provinceFilter" class="text-sm font-medium text-textMuted hidden lg:block">Province:</label>
+                <select id="provinceFilter" class="form-select text-sm py-2 px-3 rounded-lg appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23A0A0A0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_0.7rem_top_50%] bg-[length:0.65rem_auto]">
+                    <option value="All">All Provinces</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-screen-2xl mx-auto px-6 pb-10 w-full mt-6 md:mt-2">
+        <!-- Row 1: KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 mt-4">
+            
+            <!-- Revenue -->
+            <div class="kpi-card bg-cardBg p-6 rounded-2xl border border-borderColor flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-textMuted uppercase tracking-wider">Total Revenue</h3>
+                    <p class="text-3xl font-bold text-textMain mt-2" id="kpiRevenue">Rp 0</p>
+                </div>
+                <div class="text-accentPeach">
+                    <svg class="w-14 h-14 drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2H7V9h2V7h2v2h2v2h-2v2z"/></svg>
+                </div>
+            </div>
+            
+            <!-- Profit -->
+            <div class="kpi-card bg-cardBg p-6 rounded-2xl border border-borderColor flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-textMuted uppercase tracking-wider">Total Profit</h3>
+                    <p class="text-3xl font-bold text-textMain mt-2" id="kpiProfit">Rp 0</p>
+                </div>
+                <div class="text-accentPeach">
+                    <svg class="w-14 h-14 drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/></svg>
+                </div>
+            </div>
+            
+            <!-- Transactions -->
+            <div class="kpi-card bg-cardBg p-6 rounded-2xl border border-borderColor flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-textMuted uppercase tracking-wider">Transactions</h3>
+                    <p class="text-3xl font-bold text-textMain mt-2" id="kpiTransactions">0</p>
+                </div>
+                <div class="text-accentPeach">
+                    <svg class="w-14 h-14 drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+                </div>
+            </div>
+            
+            <!-- Units Sold -->
+            <div class="kpi-card bg-cardBg p-6 rounded-2xl border border-borderColor flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-textMuted uppercase tracking-wider">Units Sold</h3>
+                    <p class="text-3xl font-bold text-textMain mt-2" id="kpiUnits">0</p>
+                </div>
+                <div class="text-accentPeach">
+                    <svg class="w-14 h-14 drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/></svg>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- Row 2: Charts Area & Donut -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Overlapping Area Chart -->
+            <div class="bg-cardBg p-6 rounded-2xl border border-borderColor shadow-lg lg:col-span-2">
+                <h3 class="text-lg font-semibold mb-4 text-textMain">Revenue vs Profit Trends</h3>
+                <div id="chartArea" class="w-full h-80"></div>
+            </div>
+            <!-- Donut Chart -->
+            <div class="bg-cardBg p-6 rounded-2xl border border-borderColor shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-textMain">Payment Method</h3>
+                <div id="chartDonut" class="w-full h-80"></div>
+            </div>
+        </div>
+
+        <!-- Row 3: Bar Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Vertical Bar Chart -->
+            <div class="bg-cardBg p-6 rounded-2xl border border-borderColor shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-textMain">Revenue by Category</h3>
+                <div id="chartBarVert" class="w-full h-80"></div>
+            </div>
+            <!-- Horizontal Bar Chart -->
+            <div class="bg-cardBg p-6 rounded-2xl border border-borderColor shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-textMain">Top 5 Products by Units</h3>
+                <div id="chartBarHoriz" class="w-full h-80"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Data Global Array
+        let rawData =[];
+
+        // Konfigurasi Palet Warna Tema (Krem/Peach Terang hingga Merah Gelap)
+        const themeConfig = {
+            bgMain: 'rgba(0,0,0,0)', 
+            textWhite: '#FFFFFF',
+            gridColor: '#2A2A2A',
+            
+            // Konfigurasi Area Trend
+            revColor: 'rgba(169, 50, 38, 0.6)',   // Merah Gelap transparan
+            revLine: '#A93226',                   // Merah Gelap solid
+            profColor: 'rgba(250, 215, 161, 0.7)',// Peach Terang transparan
+            profLine: '#FAD7A1',                  // Peach solid
+            
+            // Palet Donut Chart
+            donutColors:['#A93226', '#CD6155', '#E6B0AA', '#F5CBA7', '#FAD7A1', '#7B241C'],
+            
+            // Gradasi untuk Bar Charts
+            barGradientScale: [[0, '#FAD7A1'], // Krem / Peach Terang
+                [1, '#A93226']  // Merah Gelap
+            ]
+        };
+
+        // Base Layout Plotly: Revisi Background Tooltip Hitam dan Font Putih
+        const plotlyBaseLayout = {
+            paper_bgcolor: themeConfig.bgMain,
+            plot_bgcolor: themeConfig.bgMain,
+            font: { color: themeConfig.textWhite, family: 'Inter, sans-serif' },
+            xaxis: { 
+                gridcolor: themeConfig.gridColor, 
+                zerolinecolor: themeConfig.gridColor,
+                tickfont: { color: themeConfig.textWhite } 
+            },
+            yaxis: { 
+                gridcolor: themeConfig.gridColor, 
+                zerolinecolor: themeConfig.gridColor,
+                tickfont: { color: themeConfig.textWhite } 
+            },
+            margin: { t: 10, l: 50, r: 20, b: 40 },
+            hoverlabel: { 
+                bgcolor: '#121212',       // Latar kotak tooltip hitam pekat/gelap
+                bordercolor: '#FAD7A1',   // Bingkai tooltip warna emas/peach
+                font: { color: '#FFFFFF' }// Pastikan font putih bersih
+            },
+        };
+
+        /**
+         * Fungsi Formatter Singkat untuk Angka Besar (M/Jt/rb)
+         */
+        function formatSingkat(num) {
+            let isNegative = num < 0;
+            let absNum = Math.abs(num);
+            let formatted = '';
+
+            if (absNum >= 1000000000) {
+                formatted = (absNum / 1000000000).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + ' M';
+            } else if (absNum >= 1000000) {
+                formatted = (absNum / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + ' Jt';
+            } else if (absNum >= 1000) {
+                formatted = (absNum / 1000).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + ' rb';
+            } else {
+                formatted = absNum.toLocaleString('id-ID');
+            }
+            
+            return isNegative ? '-' + formatted : formatted;
+        }
+
+        // Inisialisasi Script
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('loadingStatus').style.display = 'block';
+            loadCSVData();
+            setupDateValidation();
+
+            // Event listener saat semua filter berubah memicu re-render
+            document.getElementById('categoryFilter').addEventListener('change', renderDashboard);
+            document.getElementById('provinceFilter').addEventListener('change', renderDashboard);
+            document.getElementById('startDate').addEventListener('change', renderDashboard);
+            document.getElementById('endDate').addEventListener('change', renderDashboard);
+        });
+
+        // =========================================================================
+        // BAGIAN PARSING CSV, SETUP FILTER & VALIDASI
+        // =========================================================================
+
+        /**
+         * Membaca dan mem-parsing data CSV.
+         */
+        function loadCSVData() {
+            Papa.parse("DatasetPenjualanToko_Clean.csv", {
+                download: true,
+                header: true,
+                delimiter: ";", 
+                skipEmptyLines: true,
+                complete: function(results) {
+                    rawData = results.data.map(row => {
+                        let rev = parseFloat(row.Revenue) || 0;
+                        let units = parseFloat(row.Units_Sold) || 0;
+                        let unitCost = parseFloat(row.Unit_Cost) || 0; 
+                        row.Profit = rev - (units * unitCost);
+                        row._parsedDate = row.Date ? new Date(row.Date) : null;
+                        return row; 
+                    });
+
+                    const loader = document.getElementById('loadingStatus');
+                    loader.innerHTML = '<span style="color:#FAD7A1">Data Ready</span>';
+                    setTimeout(() => loader.style.display = 'none', 2000);
+                    
+                    populateFilters();
+                    renderDashboard();
+                },
+                error: function(err) {
+                    const loader = document.getElementById('loadingStatus');
+                    loader.innerHTML = '<span class="text-red-500">Error loading CSV.</span>';
+                    console.error("PapaParse Error:", err);
+                }
+            });
+        }
+
+        // Setup Validasi Rentang Antar Input Tanggal (Hardcoded Fallback)
+        function setupDateValidation() {
+            const startInput = document.getElementById('startDate');
+            const endInput = document.getElementById('endDate');
+
+            startInput.addEventListener('change', () => {
+                // Jangan biarkan End Date lebih rendah dari Start Date yang dipilih
+                endInput.min = startInput.value ? startInput.value : "2023-01-01";
+            });
+
+            endInput.addEventListener('change', () => {
+                // Jangan biarkan Start Date melebihi End Date yang dipilih
+                startInput.max = endInput.value ? endInput.value : "2024-12-31";
+            });
+        }
+
+        // Setup Opsi Dropdown Kategori & Provinsi
+        function populateFilters() {
+            const categories =[...new Set(rawData.map(r => r.Category))].filter(Boolean).sort();
+            const provinces =[...new Set(rawData.map(r => r.Province))].filter(Boolean).sort();
+
+            const catSelect = document.getElementById('categoryFilter');
+            categories.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                catSelect.appendChild(opt);
+            });
+
+            const provSelect = document.getElementById('provinceFilter');
+            provinces.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p; opt.textContent = p;
+                provSelect.appendChild(opt);
+            });
+        }
+
+        /**
+         * Fungsi Utama Filtering Data
+         */
+        function getFilteredData() {
+            const catVal = document.getElementById('categoryFilter').value;
+            const provVal = document.getElementById('provinceFilter').value;
+            const startVal = document.getElementById('startDate').value;
+            const endVal = document.getElementById('endDate').value;
+            
+            let startObj = startVal ? new Date(startVal) : null;
+            let endObj = endVal ? new Date(endVal) : null;
+            
+            if(startObj) startObj.setHours(0,0,0,0);
+            if(endObj) endObj.setHours(23,59,59,999);
+
+            return rawData.filter(row => {
+                const matchCat = (catVal === 'All') || (row.Category === catVal);
+                const matchProv = (provVal === 'All') || (row.Province === provVal);
+                
+                let matchDate = true;
+                if(row._parsedDate && !isNaN(row._parsedDate)) {
+                    if (startObj && row._parsedDate < startObj) matchDate = false;
+                    if (endObj && row._parsedDate > endObj) matchDate = false;
+                } else if(startObj || endObj) {
+                    matchDate = false;
+                }
+
+                return matchCat && matchProv && matchDate;
+            });
+        }
+        
+        // =========================================================================
+        // RENDERING DASHBOARD
+        // =========================================================================
+
+        function renderDashboard() {
+            const data = getFilteredData();
+            updateKPIs(data);
+            drawAreaChart(data);
+            drawDonutChart(data);
+            drawVerticalBar(data);
+            drawHorizontalBar(data);
+        }
+
+        function aggregateSum(data, groupCol, sumCol) {
+            const map = {};
+            data.forEach(row => {
+                const key = row[groupCol];
+                const val = parseFloat(row[sumCol]) || 0;
+                if (!key) return;
+                if (!map[key]) map[key] = 0;
+                map[key] += val;
+            });
+            return map;
+        }
+
+        // 1. Update Kartu KPI dengan formatSingkat
+        function updateKPIs(data) {
+            let totalRev = 0, totalProf = 0, totalUnits = 0;
+            const uniqueTx = new Set();
+
+            data.forEach(r => {
+                totalRev += parseFloat(r.Revenue) || 0;
+                totalProf += parseFloat(r.Profit) || 0;
+                totalUnits += parseFloat(r.Units_Sold) || 0;
+                if (r.Transaction_ID) uniqueTx.add(r.Transaction_ID);
+            });
+
+            document.getElementById('kpiRevenue').textContent = 'Rp ' + formatSingkat(totalRev);
+            document.getElementById('kpiProfit').textContent = 'Rp ' + formatSingkat(totalProf);
+            document.getElementById('kpiTransactions').textContent = formatSingkat(uniqueTx.size);
+            document.getElementById('kpiUnits').textContent = formatSingkat(totalUnits);
+        }
+
+        // 2. Area Chart Overlapping
+        function drawAreaChart(data) {
+            const revMap = aggregateSum(data, 'Date', 'Revenue');
+            const profMap = aggregateSum(data, 'Date', 'Profit');
+
+            const dates = Object.keys(revMap).sort((a, b) => new Date(a) - new Date(b));
+            const revVals = dates.map(d => revMap[d]);
+            const profVals = dates.map(d => profMap[d]);
+
+            const traceRev = {
+                x: dates, y: revVals,
+                name: 'Revenue',
+                type: 'scatter', mode: 'lines',
+                fill: 'tozeroy', 
+                fillcolor: themeConfig.revColor,
+                line: { color: themeConfig.revLine, width: 2 },
+                text: revVals.map(v => 'Rp ' + formatSingkat(v)),
+                hovertemplate: '<b>%{x}</b><br>Revenue: <b>%{text}</b><extra></extra>'
+            };
+
+            const traceProf = {
+                x: dates, y: profVals,
+                name: 'Profit',
+                type: 'scatter', mode: 'lines',
+                fill: 'tozeroy', 
+                fillcolor: themeConfig.profColor,
+                line: { color: themeConfig.profLine, width: 2 },
+                text: profVals.map(v => 'Rp ' + formatSingkat(v)),
+                hovertemplate: '<b>%{x}</b><br>Profit: <b>%{text}</b><extra></extra>'
+            };
+
+            const layout = {
+                ...plotlyBaseLayout,
+                showlegend: true,
+                legend: { orientation: 'h', y: 1.1, x: 0, font: { color: themeConfig.textWhite } },
+                margin: { t: 10, l: 60, r: 20, b: 40 }
+            };
+
+            Plotly.newPlot('chartArea', [traceRev, traceProf], layout, {responsive: true, displayModeBar: false});
+        }
+
+        // 3. Donut Chart
+        function drawDonutChart(data) {
+            const counts = {};
+            data.forEach(r => {
+                const p = r.Payment_Method;
+                if (!p) return;
+                counts[p] = (counts[p] || 0) + 1;
+            });
+
+            const vals = Object.values(counts);
+
+            const trace = {
+                labels: Object.keys(counts),
+                values: vals,
+                type: 'pie',
+                hole: 0.6,
+                textinfo: 'percent',
+                textposition: 'outside', 
+                outsidetextfont: { color: themeConfig.textWhite, size: 12 },
+                insidetextfont: { color: themeConfig.textWhite, size: 12 },
+                marker: { colors: themeConfig.donutColors },
+                text: vals.map(v => formatSingkat(v)),
+                hovertemplate: '<b>%{label}</b><br>Trans: %{text}<br>Share: %{percent}<extra></extra>'
+            };
+
+            const layout = {
+                ...plotlyBaseLayout,
+                showlegend: true,
+                legend: { orientation: 'h', y: -0.2, font: { color: themeConfig.textWhite } },
+                margin: { t: 20, l: 20, r: 20, b: 20 }
+            };
+            
+            delete layout.xaxis;
+            delete layout.yaxis;
+
+            Plotly.newPlot('chartDonut',[trace], layout, {responsive: true, displayModeBar: false});
+        }
+
+        // 4. Vertical Bar Chart
+        function drawVerticalBar(data) {
+            const revMap = aggregateSum(data, 'Category', 'Revenue');
+            const sortedCats = Object.keys(revMap).sort((a, b) => revMap[a] - revMap[b]);
+            const vals = sortedCats.map(c => revMap[c]);
+
+            const trace = {
+                x: sortedCats,
+                y: vals,
+                type: 'bar',
+                text: vals.map(v => formatSingkat(v)), 
+                textposition: 'auto',
+                textfont: { color: themeConfig.textWhite },
+                marker: {
+                    color: vals,
+                    colorscale: themeConfig.barGradientScale,
+                    showscale: false
+                },
+                hovertemplate: '<b>%{x}</b><br>Revenue: Rp %{text}<extra></extra>'
+            };
+
+            const layout = {
+                ...plotlyBaseLayout,
+                margin: { t: 20, l: 60, r: 20, b: 60 },
+                xaxis: { automargin: true, tickfont: { size: 11, color: themeConfig.textWhite } }
+            };
+
+            Plotly.newPlot('chartBarVert',[trace], layout, {responsive: true, displayModeBar: false});
+        }
+
+        // 5. Horizontal Bar Chart
+        function drawHorizontalBar(data) {
+            const unitMap = aggregateSum(data, 'Product_Name', 'Units_Sold');
+            const topProds = Object.keys(unitMap).sort((a, b) => unitMap[b] - unitMap[a]).slice(0, 5);
+            
+            topProds.reverse();
+            const vals = topProds.map(p => unitMap[p]);
+
+            const trace = {
+                x: vals,
+                y: topProds,
+                type: 'bar',
+                orientation: 'h',
+                text: vals.map(v => formatSingkat(v)),
+                textposition: 'auto',
+                textfont: { color: themeConfig.textWhite },
+                marker: {
+                    color: vals,
+                    colorscale: themeConfig.barGradientScale,
+                    showscale: false
+                },
+                hovertemplate: '<b>%{y}</b><br>Units Sold: %{text}<extra></extra>'
+            };
+
+            const layout = {
+                ...plotlyBaseLayout,
+                margin: { t: 20, l: 150, r: 20, b: 40 },
+                yaxis: { automargin: true, tickfont: { size: 11, color: themeConfig.textWhite } }
+            };
+
+            Plotly.newPlot('chartBarHoriz', [trace], layout, {responsive: true, displayModeBar: false});
+        }
+    </script>
+</body>
+</html>
